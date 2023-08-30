@@ -1,0 +1,73 @@
+pipeline {
+  agent {
+    kubernetes {
+      yaml '''
+        apiVersion: v1
+        kind: Pod
+        spec:
+          containers:
+          - name: upkubectl
+            image: ahamedthemorningstar/trscustom:0.1
+            command:
+            - cat
+            tty: true
+        '''
+    }
+  }
+  environment { 
+        master_login = credentials('master_login')
+  }
+  stages {
+    stage('Pre Test Docker') {
+      steps {
+        container('upkubectl') {
+          sh 'whoami'
+          sh 'uname -a'
+          sh 'pwd'
+        }
+      }
+    }
+    stage('Installing SSHPASS') {
+      steps {
+        container('upkubectl') {
+          sh 'apk update'
+          sh 'apk search -v -d sshpass'
+          sh 'apk add sshpass'
+        }
+      }
+    }
+    stage('Copying file from local'){
+        steps{
+            container('upkubectl'){
+                sh 'mkdir ~/.kube'
+                sh 'pwd'
+                sh 'sshpass -p $master_login_PSW scp -o StrictHostKeyChecking=no $master_login_USR@3.252.145.251:~/.kube/config ~/.kube/'
+                sh 'ls ~/.kube'
+            }
+        }
+    }
+    stage('Export the config file'){
+        steps{
+            container('upkubectl'){
+                sh 'ls ~/.kube'
+                sh 'export KUBECONFIG=~/.kube/config'
+            }
+        }
+    }
+    stage('Checking'){
+        steps{
+            container('upkubectl'){
+                sh 'kubectl'
+                sh 'kubectl get nodes'
+                sh 'kubectl create namespace argocd'
+                sh 'kubectl get ns'
+                sh 'kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml'
+                sh 'kubectl get svc -n argocd'
+                sh 'watch kubectl get pods -n argocd'
+                sh 'kubectl get all -n argocd'
+                sh 'kubectl get svc -n argocd -o wide'
+            }
+        }
+    }
+  }
+}
